@@ -1,37 +1,26 @@
-﻿using System;
+﻿using HtmlAgilityPack;
+using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.IO;
-using HtmlAgilityPack;
-
+using System.Linq;
 
 namespace tailiwnd_conversion
 {
-
     internal class Program
     {
-        static void Main(string[] args)
-            {
-                Console.WriteLine("Hello, World!");
+        private static string inputFilePath = @"C:\Users\hisha\OneDrive\Desktop\tailwind project\vendor-search.component.html";
+        private static string outputFilePath = @"C:\Users\hisha\OneDrive\Desktop\tailwind project\vendor-search-processed.component.html";
 
-                var inputFilePath = @"C:\Users\hisha\OneDrive\Desktop\tailwind project\vendor-search.component.html";
-                var outputFilePath = @"C:\Users\hisha\OneDrive\Desktop\tailwind project\vendor-search-processed.component.html";
-
-                var html = File.ReadAllText(inputFilePath);
-
-                var doc = new HtmlDocument();
-                doc.OptionOutputOriginalCase = true;
-                doc.OptionWriteEmptyNodes = false;
-                doc.LoadHtml(html);
-
-            // Use a dictionary with lambda functions for conversion
-            var conversionDictionary = new Dictionary<string, Func<string, string>>(StringComparer.OrdinalIgnoreCase)
+        private static // Use a dictionary with lambda functions for conversion
+            Dictionary<string, Func<string, string>> 
+            conversionDictionary = new Dictionary<string, Func<string, string>>(StringComparer.OrdinalIgnoreCase)
             {
                 {"fxLayout=\"row\"", _ => "flex"},
                 {"fxLayout=\"column\"", _ => "flex-col"},
+
                 {"fxLayoutGap", value => $"gap-[{value}]"},
+
+                {"fxFlexFill", _ => "fill"},
                 //---------fxLayoutAlign-----------
                 {"fxLayoutAlign", value =>
                     {
@@ -80,64 +69,145 @@ namespace tailiwnd_conversion
                 },
                 
                 //---------fxFlex.gt-size-----
-                {"fxFlex.gt-xs", value => $"sm:basis-[{value}%]"},
-                {"fxFlex.gt-sm", value => $"md:basis-[{value}%]"},
-                {"fxFlex.gt-md", value => $"lg:basis-[{value}%]"},
-                {"fxFlex.gt-lg", value => $"xl:basis-[{value}%]"},
+                {"fxFlex.gt-xs", value => $"flex sm:basis-[{value}%]"},
+                {"fxFlex.gt-sm", value => $"flex md:basis-[{value}%]"},
+                {"fxFlex.gt-md", value => $"flex lg:basis-[{value}%]"},
+                {"fxFlex.gt-lg", value => $"flex xl:basis-[{value}%]"},
                 
                 //---------fxFlex.lt-size-----
-                {"fxFlex.lt-xs", value => $"basis-[{value}%]"},// Handle with caution, as it might not always be a direct conversion
-                {"fxFlex.lt-sm", value => $"basis-[{value}%]"},
-                {"fxFlex.lt-md", value => $"sm:basis-[{value}%]"},
-                {"fxFlex.lt-lg", value => $"md:basis-[{value}%]"},
-                {"fxFlex.lt-xl", value => $"lg:basis-[{value}%]"},
+                {"fxFlex.lt-xs", value => $"flex basis-[{value}%]"},// Handle with caution, as it might not always be a direct conversion
+                {"fxFlex.lt-sm", value => $"flex basis-[{value}%]"},
+                {"fxFlex.lt-md", value => $"flex sm:basis-[{value}%]"},
+                {"fxFlex.lt-lg", value => $"flex md:basis-[{value}%]"},
+                {"fxFlex.lt-xl", value => $"flex lg:basis-[{value}%]"},
 
             };
+        static void Main(string[] args)
+        {
+            Console.WriteLine("Hello, World!");
 
+            var html = File.ReadAllText(inputFilePath);
+            var doc = new HtmlDocument();
+            doc.OptionOutputOriginalCase = true;
+            doc.OptionWriteEmptyNodes = false;
+            doc.LoadHtml(html);
+
+            ConvertAttributesToClasses(doc);
+            ReorderClassesForTailwindConvention(doc);
+            ReorderClassesForMobileFirst(doc);
+            CleanClassAttributes(doc);
+
+            SaveHtml(doc, outputFilePath);
+
+            Console.WriteLine($"HTML conversion completed! Output written to {outputFilePath}");
+           // Console.ReadLine();
+        }
+
+        private static void ConvertAttributesToClasses(HtmlDocument doc)
+        {
+     
 
             foreach (var node in doc.DocumentNode.DescendantsAndSelf())
+            {
+                foreach (var attribute in node.Attributes.ToList()) // Use ToList() to avoid collection modification errors
                 {
-                    foreach (var attribute in node.Attributes.ToList()) // Use ToList() since we'll modify the collection inside the loop
-                    {
-                        var existingClasses = new HashSet<string>(node.GetAttributeValue("class", "").Split(' '));
-                        var key = $"{attribute.Name}=\"{attribute.Value}\"";
-                       // Console.WriteLine($"Trying to lookup: {key}");
+                    var existingClasses = new HashSet<string>(node.GetAttributeValue("class", "").Split(' '));
+                    var key = $"{attribute.Name}=\"{attribute.Value}\"";
 
-                        // Direct match with dictionary (for attributes like fxlayout=row)
-                        if (conversionDictionary.TryGetValue(key, out var converterFunc))
+                    if (conversionDictionary.TryGetValue(key, out var converterFunc))
+                    {
+                        var newClass = converterFunc(attribute.Value);
+                        existingClasses.Add(newClass);
+                        node.Attributes.Remove(attribute);
+                        //Console.WriteLine($"Converted {key} to {newClass} for node {node.Name}");
+                    }
+                    // For attributes with dynamic values (like fxLayoutGap)
+                    else if (conversionDictionary.TryGetValue(attribute.Name, out converterFunc))
+                    {
+                        var newClass = converterFunc(attribute.Value);
+                        if (newClass == $"gap-[{attribute.Value}]" && !existingClasses.Contains("flex"))
                         {
-                            var newClass = converterFunc(attribute.Value);
-                            existingClasses.Add(newClass);
-                            node.Attributes.Remove(attribute);
-                            //Console.WriteLine($"Converted {key} to {newClass} for node {node.Name}");
+                            existingClasses.Add("flex");
                         }
-                        // For attributes with dynamic values (like fxLayoutGap)
-                        else if (conversionDictionary.TryGetValue(attribute.Name, out converterFunc))
-                        {
-                            var newClass = converterFunc(attribute.Value);
-                            if (newClass == $"gap-[{attribute.Value}]" && !existingClasses.Contains("flex"))
-                            {
-                                existingClasses.Add("flex");
-                            }
-                            existingClasses.Add(newClass);
-                            node.Attributes.Remove(attribute);
-                           // Console.WriteLine($"Converted {key} to {newClass} for node {node.Name}");
-                        }
+                        existingClasses.Add(newClass);
+                        node.Attributes.Remove(attribute);
+                        // Console.WriteLine($"Converted {key} to {newClass} for node {node.Name}");
+                    }
 
                     node.SetAttributeValue("class", string.Join(" ", existingClasses.ToArray()));
                 }
             }
-
-                var output = doc.DocumentNode.OuterHtml;
-                File.WriteAllText(outputFilePath, output);
-
-                var outputContent = File.ReadAllText(outputFilePath);
-                outputContent = outputContent.Replace("=\"\"", "");
-                File.WriteAllText(outputFilePath, outputContent);
-
-                Console.WriteLine($"HTML conversion completed! Output written to {outputFilePath}");
-                Console.ReadLine();
-
         }
+
+        private static void ReorderClassesForMobileFirst(HtmlDocument doc)
+        {
+            var breakpoints = new List<string> { "base", "sm", "md", "lg", "xl" };
+
+            foreach (var node in doc.DocumentNode.DescendantsAndSelf())
+            {
+                if (node.HasAttributes && node.Attributes["class"] != null)
+                {
+                    var classes = node.Attributes["class"].Value.Split(' ').ToList();
+                    classes = classes.OrderBy(c => GetOrderForClass(c, breakpoints)).ToList();
+                    node.SetAttributeValue("class", string.Join(" ", classes));
+                }
+            }
+        }
+
+        private static int GetOrderForClass(string className, List<string> breakpoints)
+        {
+            for (int i = 0; i < breakpoints.Count; i++)
+            {
+                if (className.StartsWith($"{breakpoints[i]}:"))
+                {
+                    return i;
+                }
+            }
+            return 0;  // default is 'base'
+        }
+
+        private static void CleanClassAttributes(HtmlDocument doc)
+        {
+            foreach (var node in doc.DocumentNode.DescendantsAndSelf())
+            {
+                if (node.HasAttributes && node.Attributes["class"] != null)
+                {
+                    node.Attributes["class"].Value = node.Attributes["class"].Value.Trim();
+                }
+            }
+        }
+
+        private static void SaveHtml(HtmlDocument doc, string path)
+        {
+            var output = doc.DocumentNode.OuterHtml;
+            File.WriteAllText(path, output);
+
+            var outputContent = File.ReadAllText(path);
+            outputContent = outputContent.Replace("=\"\"", "");
+            File.WriteAllText(path, outputContent);
+        }
+
+        private static void ReorderClassesForTailwindConvention(HtmlDocument doc)
+        {
+            foreach (var node in doc.DocumentNode.DescendantsAndSelf())
+            {
+                if (node.HasAttributes && node.Attributes["class"] != null)
+                {
+                    var classes = node.Attributes["class"].Value.Split(' ').ToList();
+
+                    // Sort the classes so that 'flex' and 'flex-*' classes come first
+                    classes.Sort((a, b) =>
+                    {
+                        if (a == "flex" && b != "flex") return -1;   // 'flex' should always be first
+                        if (a != "flex" && b == "flex") return 1;
+                    
+                        return 0;   // No preference for non-flex classes
+                    });
+
+                    node.Attributes["class"].Value = string.Join(" ", classes);
+                }
+            }
+        }
+
     }
 }
