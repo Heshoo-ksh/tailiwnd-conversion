@@ -10,6 +10,7 @@ namespace tailiwnd_conversion
     {
         private static string inputFilePath = @"C:\Users\hisha\OneDrive\Desktop\tailwind project\vendor-search.component.html";
         private static string outputFilePath = @"C:\Users\hisha\OneDrive\Desktop\tailwind project\vendor-search-processed.component.html";
+        private static bool shouldAddFlex = true; // The flag that controls whether "flex" should be added
 
         private static // Use a dictionary with lambda functions for conversion
             Dictionary<string, Func<string, string>> 
@@ -20,7 +21,7 @@ namespace tailiwnd_conversion
 
                 {"fxLayoutGap", value => $"gap-[{value}]"},
 
-                {"fxFlexFill", _ => "fill"},
+                {"fxFlexFill", _ => {shouldAddFlex = false; return "fill"; } },
                 //---------fxLayoutAlign-----------
                 {"fxLayoutAlign", value =>
                     {
@@ -35,7 +36,7 @@ namespace tailiwnd_conversion
                         }
                         else if (parts.Count == 2)
                         {
-                            mainAxis = parts[0];
+                            mainAxis += parts[0];
                             crossAxis = parts[1];
                         }
                         else
@@ -69,19 +70,20 @@ namespace tailiwnd_conversion
                 },
                 
                 //---------fxFlex.gt-size-----
-                {"fxFlex.gt-xs", value => $"flex sm:basis-[{value}%]"},
-                {"fxFlex.gt-sm", value => $"flex md:basis-[{value}%]"},
-                {"fxFlex.gt-md", value => $"flex lg:basis-[{value}%]"},
-                {"fxFlex.gt-lg", value => $"flex xl:basis-[{value}%]"},
+                {"fxFlex.gt-xs", value => $"sm:basis-[{value}%]"},
+                {"fxFlex.gt-sm", value => $"md:basis-[{value}%]"},
+                {"fxFlex.gt-md", value => $"lg:basis-[{value}%]"},
+                {"fxFlex.gt-lg", value => $"xl:basis-[{value}%]"},
                 
                 //---------fxFlex.lt-size-----
-                {"fxFlex.lt-xs", value => $"flex basis-[{value}%]"},// Handle with caution, as it might not always be a direct conversion
-                {"fxFlex.lt-sm", value => $"flex basis-[{value}%]"},
-                {"fxFlex.lt-md", value => $"flex sm:basis-[{value}%]"},
-                {"fxFlex.lt-lg", value => $"flex md:basis-[{value}%]"},
-                {"fxFlex.lt-xl", value => $"flex lg:basis-[{value}%]"},
+                {"fxFlex.lt-xs", value => $"basis-[{value}%]"},// Handle with caution, as it might not always be a direct conversion
+                {"fxFlex.lt-sm", value => $"basis-[{value}%]"},
+                {"fxFlex.lt-md", value => $"sm:basis-[{value}%]"},
+                {"fxFlex.lt-lg", value => $"md:basis-[{value}%]"},
+                {"fxFlex.lt-xl", value => $"lg:basis-[{value}%]"},
 
             };
+        
         static void Main(string[] args)
         {
             Console.WriteLine("Hello, World!");
@@ -105,7 +107,6 @@ namespace tailiwnd_conversion
 
         private static void ConvertAttributesToClasses(HtmlDocument doc)
         {
-     
 
             foreach (var node in doc.DocumentNode.DescendantsAndSelf())
             {
@@ -114,27 +115,21 @@ namespace tailiwnd_conversion
                     var existingClasses = new HashSet<string>(node.GetAttributeValue("class", "").Split(' '));
                     var key = $"{attribute.Name}=\"{attribute.Value}\"";
 
-                    if (conversionDictionary.TryGetValue(key, out var converterFunc))
+                    shouldAddFlex = true; // Reset before each conversion
+
+                    if (conversionDictionary.TryGetValue(key, out var converterFunc) || conversionDictionary.TryGetValue(attribute.Name, out converterFunc))
                     {
                         var newClass = converterFunc(attribute.Value);
                         existingClasses.Add(newClass);
                         node.Attributes.Remove(attribute);
                         //Console.WriteLine($"Converted {key} to {newClass} for node {node.Name}");
-                    }
-                    // For attributes with dynamic values (like fxLayoutGap)
-                    else if (conversionDictionary.TryGetValue(attribute.Name, out converterFunc))
-                    {
-                        var newClass = converterFunc(attribute.Value);
-                        if (newClass == $"gap-[{attribute.Value}]" && !existingClasses.Contains("flex"))
+
+                        if (shouldAddFlex && !existingClasses.Contains("flex "))
                         {
                             existingClasses.Add("flex");
                         }
-                        existingClasses.Add(newClass);
-                        node.Attributes.Remove(attribute);
-                        // Console.WriteLine($"Converted {key} to {newClass} for node {node.Name}");
+                        node.SetAttributeValue("class", string.Join(" ", existingClasses.ToArray()));
                     }
-
-                    node.SetAttributeValue("class", string.Join(" ", existingClasses.ToArray()));
                 }
             }
         }
@@ -200,7 +195,6 @@ namespace tailiwnd_conversion
                     {
                         if (a == "flex" && b != "flex") return -1;   // 'flex' should always be first
                         if (a != "flex" && b == "flex") return 1;
-                    
                         return 0;   // No preference for non-flex classes
                     });
 
