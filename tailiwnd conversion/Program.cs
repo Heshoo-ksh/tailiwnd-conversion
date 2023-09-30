@@ -23,51 +23,7 @@ namespace tailiwnd_conversion
 
                 {"fxFlexFill", _ => {return "fill"; } },
                 //---------fxLayoutAlign-----------
-                {"fxLayoutAlign", value =>
-                    {
-                        var parts = value.Split(' ').Select(part => part.Trim()).ToList();
-
-                        string mainAxis = "";
-                        string crossAxis = "";
-
-                        if (parts.Count == 1)
-                        {
-                            mainAxis = parts[0];
-                        }
-                        else if (parts.Count == 2)
-                        {
-                            mainAxis += parts[0];
-                            crossAxis = parts[1];
-                        }
-                        else
-                        {
-                            return ""; // return empty string if the value format is not recognized
-                        }
-
-                        var mainAxisMapping = new Dictionary<string, string>
-                        {
-                            {"start", "justify-start"},
-                            {"center", "justify-center"},
-                            {"end", "justify-end"},
-                            {"space-between", "justify-between"},
-                            {"space-around", "justify-around"}
-                        };
-
-                        var crossAxisMapping = new Dictionary<string, string>
-                        {
-                            {"start", "items-start"},
-                            {"center", "items-center"},
-                            {"end", "items-end"},
-                            {"baseline", "items-baseline"},
-                            {"stretch", "items-stretch"}
-                        };
-
-                        var mainClass = mainAxisMapping.ContainsKey(mainAxis) ? mainAxisMapping[mainAxis] : "";
-                        var crossClass = crossAxisMapping.ContainsKey(crossAxis) ? crossAxisMapping[crossAxis] : "";
-
-                        return $"{mainClass} {crossClass}".Trim();
-                    }
-                },
+                {"fxLayoutAlign", ConvertFxLayoutAlign},
 
                 {"fxFlex", ConvertFxFlex},
                 {"gdColumns", ConvertGdColumns},
@@ -96,34 +52,34 @@ namespace tailiwnd_conversion
            // Console.ReadLine();
         }
 
-     private static void ConvertAttributesToClasses(HtmlDocument doc)
-{
-    foreach (var node in doc.DocumentNode.DescendantsAndSelf())
-    {
-        shouldAddFlex = true; // Reset flag for each node
-        foreach (var attribute in node.Attributes.ToList()) 
+        private static void ConvertAttributesToClasses(HtmlDocument doc)
         {
-            var existingClasses = new HashSet<string>(node.GetAttributeValue("class", "").Split(' '));
-
-            var (coreProperty, tailwindPrefix) = ExtractPropertyAndPrefix(attribute.Name);
-
-            if (conversionDictionary.TryGetValue(coreProperty, out var converterFunc))
+            foreach (var node in doc.DocumentNode.DescendantsAndSelf())
             {
-                var newClass = converterFunc(attribute.Value);
-                if (shouldAddFlex)
+                shouldAddFlex = true; // Reset flag for each node
+                foreach (var attribute in node.Attributes.ToList()) 
                 {
-                    existingClasses.Add("flex");
+                    var existingClasses = new HashSet<string>(node.GetAttributeValue("class", "").Split(' '));
+
+                    var (coreProperty, tailwindPrefix) = ExtractPropertyAndPrefix(attribute.Name);
+
+                    if (conversionDictionary.TryGetValue(coreProperty, out var converterFunc))
+                    {
+                        var newClass = converterFunc(attribute.Value);
+                        if (shouldAddFlex)
+                        {
+                            existingClasses.Add("flex");
+                        }
+                        existingClasses.Add(tailwindPrefix + newClass);
+                        node.Attributes.Remove(attribute);
+
+                        EnsureGridFlowRowAndOrder(existingClasses);
+
+                        node.SetAttributeValue("class", string.Join(" ", existingClasses.ToArray()));
+                    }
                 }
-                existingClasses.Add(tailwindPrefix + newClass);
-                node.Attributes.Remove(attribute);
-
-                EnsureGridFlowRowAndOrder(existingClasses);
-
-                node.SetAttributeValue("class", string.Join(" ", existingClasses.ToArray()));
             }
         }
-    }
-}
 
 
         private static void ReorderClassesForTailwindConvention(HtmlDocument doc)
@@ -388,6 +344,37 @@ namespace tailiwnd_conversion
                 .Replace(" ", "");
 
             return $"{tailwindPrefix}grid-cols-[{classValue}]";
+        }
+
+        private static string ConvertFxLayoutAlign(string value)
+        {
+            var parts = value.Split(' ').Select(part => part.Trim()).ToList();
+
+            string mainAxis = parts.Count >= 1 ? parts[0] : "";
+            string crossAxis = parts.Count == 2 ? parts[1] : "";
+
+            var mainAxisMapping = new Dictionary<string, string>
+            {
+                {"start", "justify-start"},
+                {"center", "justify-center"},
+                {"end", "justify-end"},
+                {"space-between", "justify-between"},
+                {"space-around", "justify-around"}
+            };
+
+            var crossAxisMapping = new Dictionary<string, string>
+            {
+                {"start", "items-start"},
+                {"center", "items-center"},
+                {"end", "items-end"},
+                {"baseline", "items-baseline"},
+                {"stretch", "items-stretch"}
+            };
+
+            var mainClass = mainAxisMapping.ContainsKey(mainAxis) ? mainAxisMapping[mainAxis] : "";
+            var crossClass = crossAxisMapping.ContainsKey(crossAxis) ? crossAxisMapping[crossAxis] : "";
+
+            return $"{mainClass} {crossClass}".Trim();
         }
 
     }
