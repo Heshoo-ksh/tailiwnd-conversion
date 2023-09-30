@@ -140,28 +140,12 @@ namespace tailiwnd_conversion
                         existingClasses.Add(newClass);
                         node.Attributes.Remove(attribute);
 
-                        if (shouldAddFlex && !existingClasses.Contains("flex") && !existingClasses.Contains("grid"))
-                        {
-                           //existingClasses.Add("flex");
-                        }
+                        // Ensure grid-flow-row and correct order
+                        EnsureGridFlowRowAndOrder(existingClasses);
+
                         node.SetAttributeValue("class", string.Join(" ", existingClasses.ToArray()));
                     }
 
-                    var match = Regex.Match(attribute.Name, @"gdColumns\.(?<size>[\w-]+)");
-                    if (match.Success)
-                    {
-                        var sizePrefix = match.Groups["size"].Value;
-                        var newClass = ConvertGdColumns(sizePrefix, attribute.Value);
-
-                        // Ensuring no duplicate 'grid' class is added
-                        if (!existingClasses.Contains("grid"))
-                        {
-                            existingClasses.Add("grid");
-                        }
-                        existingClasses.Add("grid-flow-row");  // Adding as specified
-                        existingClasses.Add(newClass);
-                        node.Attributes.Remove(attribute);
-                    }
                 }
             }
         }
@@ -174,18 +158,51 @@ namespace tailiwnd_conversion
                 {
                     var classes = node.Attributes["class"].Value.Split(' ').ToList();
 
-                    // Sort the classes so that 'flex' and 'flex-*' classes come first
-                    classes.Sort((a, b) =>
-                    {
-                        if (a == "flex" && b != "flex") return -1;   // 'flex' should always be first
-                        if (a != "flex" && b == "flex") return 1;
-                        return 0;   // No preference for non-flex classes
-                    });
+                    classes.Sort(CompareTailwindClasses);
 
                     node.Attributes["class"].Value = string.Join(" ", classes);
                 }
             }
         }
+
+        private static int CompareTailwindClasses(string a, string b)
+        {
+            // Placeholders for checking existence
+            bool isAFlex = a == "flex";
+            bool isBFlex = b == "flex";
+            bool isAGrid = a == "grid";
+            bool isBGrid = b == "grid";
+            bool isAGridFlowRow = a.StartsWith("grid-flow-row");
+            bool isBGridFlowRow = b.StartsWith("grid-flow-row");
+            bool isAGap = a.StartsWith("gap-");
+            bool isBGap = b.StartsWith("gap-");
+            bool isAGridCols = a.StartsWith("grid-cols");
+            bool isBGridCols = b.StartsWith("grid-cols");
+
+            // Ensure 'flex' comes first
+            if (isAFlex) return -1;
+            if (isBFlex) return 1;
+
+            // Ensure 'grid' comes second after 'flex'
+            if (isAGrid && !isBFlex) return -1;
+            if (isBGrid && !isAFlex) return 1;
+
+            // Ensure 'grid-flow-row' comes third after 'grid'
+            if (isAGridFlowRow && !isBGrid && !isBFlex) return -1;
+            if (isBGridFlowRow && !isAGrid && !isAFlex) return 1;
+
+            // Ensure 'gap-' comes fourth after 'grid-flow-row'
+            if (isAGap && !isBGridFlowRow && !isBGrid && !isBFlex) return -1;
+            if (isBGap && !isAGridFlowRow && !isAGrid && !isAFlex) return 1;
+
+            // 'grid-cols' should come last
+            if (isAGridCols) return 1;
+            if (isBGridCols) return -1;
+
+            return 0; // In case none of the above conditions match, which should ideally not happen
+        }
+
+
 
         private static void ReorderClassesForMobileFirst(HtmlDocument doc)
         {
@@ -272,7 +289,7 @@ namespace tailiwnd_conversion
         private static string ConvertFxFlex(string value, string screenSize, string prefix)
         {
             string tailwindPrefix = ConvertScreenSize(screenSize, prefix);
-            // Here we are assuming that we're just setting the basis based on the value. Modify if needed.
+            // Here we are assuming that we're just setting the basis based on the value.
             return $"{tailwindPrefix}basis-[{value}%]";
         }
 
@@ -281,6 +298,8 @@ namespace tailiwnd_conversion
             if (string.IsNullOrEmpty(prefix))
             {
                 // If no prefix, return the screen size directly
+                if (size == "xs" || size == "sm")
+                    return "";
                 return size + ":";
             }
 
@@ -319,11 +338,19 @@ namespace tailiwnd_conversion
             var classValue = value
                 .Replace("minmax", "_minmax")
                 .Replace("1fr", "_1fr")
-                .Replace(" ", "_");
+                .Replace(" ", "");
 
             return $"{tailwindPrefix}grid-cols-[{classValue}]";
         }
 
+        private static void EnsureGridFlowRowAndOrder(HashSet<string> existingClasses)
+        {
+            // Ensure grid-flow-row is present if grid-cols-* is present
+            if (existingClasses.Any(c => c.StartsWith("grid-cols-")) && !existingClasses.Contains("grid-flow-row"))
+            {
+                existingClasses.Add("grid-flow-row");
+            }
+        }
 
 
 
