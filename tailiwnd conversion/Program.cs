@@ -13,21 +13,16 @@ namespace tailiwnd_conversion
         private static string outputFilePath = @"C:\Users\hisha\OneDrive\Desktop\tailwind project\vendor-details-processed.component.html";
         private static bool shouldAddFlex = true; // The flag that controls whether "flex" should be added
 
-        private static // Use a dictionary with lambda functions for conversion
-            Dictionary<string, Func<string, string>> 
+        private static Dictionary<string, Func<string, string>> 
             conversionDictionary = new Dictionary<string, Func<string, string>>(StringComparer.OrdinalIgnoreCase)
             {
                 {"fxLayout", ConvertFxLayout},
-
                 {"fxLayoutGap", ConvertFxLayoutGap},
-
-                {"fxFlexFill", _ => {return "fill"; } },
-                //---------fxLayoutAlign-----------
                 {"fxLayoutAlign", ConvertFxLayoutAlign},
-
                 {"fxFlex", ConvertFxFlex},
                 {"gdColumns", ConvertGdColumns},
-
+                {"fxFlexOrder", ConvertFxFlexOrder},
+                {"fxFlexFill", _ => { shouldAddFlex = false; return  "fill"; }},
 
             };
         
@@ -56,9 +51,10 @@ namespace tailiwnd_conversion
         {
             foreach (var node in doc.DocumentNode.DescendantsAndSelf())
             {
-                shouldAddFlex = true; // Reset flag for each node
                 foreach (var attribute in node.Attributes.ToList()) 
                 {
+                    shouldAddFlex = true; // Reset flag for each node
+
                     var existingClasses = new HashSet<string>(node.GetAttributeValue("class", "").Split(' '));
 
                     var (coreProperty, tailwindPrefix) = ExtractPropertyAndPrefix(attribute.Name);
@@ -66,7 +62,7 @@ namespace tailiwnd_conversion
                     if (conversionDictionary.TryGetValue(coreProperty, out var converterFunc))
                     {
                         var newClass = converterFunc(attribute.Value);
-                        if (shouldAddFlex)
+                        if (shouldAddFlex && !existingClasses.Contains("flex") && !existingClasses.Contains("grid"))
                         {
                             existingClasses.Add("flex");
                         }
@@ -80,7 +76,6 @@ namespace tailiwnd_conversion
                 }
             }
         }
-
 
         private static void ReorderClassesForTailwindConvention(HtmlDocument doc)
         {
@@ -272,9 +267,17 @@ namespace tailiwnd_conversion
             {
                 existingClasses.Add("grid-flow-row");
             }
+            if (existingClasses.Any(c => c.StartsWith("grid-cols-")) && !existingClasses.Contains("grid "))
+            {
+                existingClasses.Add("grid");
+            }
         }
+        
+        //-----conversion functions
         private static string ConvertFxLayout(string value)
         {
+            shouldAddFlex = false;
+
             if (value == "row")
                 return "flex";
             else if (value == "column")
@@ -286,15 +289,6 @@ namespace tailiwnd_conversion
         {
             // Split the value into parts
             var parts = value.Split(' ').Select(part => part.Trim()).ToList();
-
-            // Determine layout type: flex (default)
-            var layoutType = "";
-            if (parts.Contains("grid"))
-            {
-                layoutType = "grid";
-                parts.Remove("grid");
-                shouldAddFlex = false;  // set flag to false so flex is not added
-            }
 
             // Extract gap values
             string gapX = "";
@@ -310,24 +304,18 @@ namespace tailiwnd_conversion
                 gapY = parts[1] != "0px" ? $"gap-y-[{parts[1]}]" : "";
             }
 
-            return $"{layoutType} {gapX} {gapY}".Trim();
+            return $"{gapX} {gapY}".Trim();
         }
 
         private static string ConvertFxFlex(string value)
         {
-            var parts = value.Split('.');
-            if (parts.Length > 1)
-            {
-                var prefixSize = parts[1];
-                string tailwindPrefix = ConvertScreenSize(prefixSize);
-                return $"{tailwindPrefix}basis-[{value}%]";
-            }
             // Default behavior for no prefix
             return $"basis-[{value}%]";
         }
 
         private static string ConvertGdColumns(string value)
         {
+            shouldAddFlex = false;
             var parts = value.Split('.');
             string actualValue = parts[0];
             string tailwindPrefix = "";
@@ -376,6 +364,13 @@ namespace tailiwnd_conversion
 
             return $"{mainClass} {crossClass}".Trim();
         }
+
+        private static string ConvertFxFlexOrder(string value)
+        {
+            return $"order-{value}";
+        }
+
+
 
     }
 }
