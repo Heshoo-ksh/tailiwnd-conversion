@@ -51,9 +51,10 @@ namespace tailiwnd_conversion
         {
             foreach (var node in doc.DocumentNode.DescendantsAndSelf())
             {
-                shouldAddFlex = true; // Reset flag for each node
                 foreach (var attribute in node.Attributes.ToList()) 
                 {
+                    shouldAddFlex = true; // Reset flag for each node
+
                     var existingClasses = new HashSet<string>(node.GetAttributeValue("class", "").Split(' '));
 
                     var (coreProperty, tailwindPrefix) = ExtractPropertyAndPrefix(attribute.Name);
@@ -61,7 +62,7 @@ namespace tailiwnd_conversion
                     if (conversionDictionary.TryGetValue(coreProperty, out var converterFunc))
                     {
                         var newClass = converterFunc(attribute.Value);
-                        if (shouldAddFlex )
+                        if (shouldAddFlex && !existingClasses.Contains("flex") && !existingClasses.Contains("grid"))
                         {
                             existingClasses.Add("flex");
                         }
@@ -275,6 +276,8 @@ namespace tailiwnd_conversion
         //-----conversion functions
         private static string ConvertFxLayout(string value)
         {
+            shouldAddFlex = false;
+
             if (value == "row")
                 return "flex";
             else if (value == "column")
@@ -286,17 +289,6 @@ namespace tailiwnd_conversion
         {
             // Split the value into parts
             var parts = value.Split(' ').Select(part => part.Trim()).ToList();
-
-            // Determine layout type: flex (default)
-            var layoutType = "";
-
-            if (parts.Contains("flex") || (parts.Contains("grid")))
-            {
-                layoutType = "";
-                parts.Remove("flex");
-
-                shouldAddFlex = false;  // set flag to false so flex is not added
-            }
 
             // Extract gap values
             string gapX = "";
@@ -312,7 +304,7 @@ namespace tailiwnd_conversion
                 gapY = parts[1] != "0px" ? $"gap-y-[{parts[1]}]" : "";
             }
 
-            return $"{layoutType} {gapX} {gapY}".Trim();
+            return $"{gapX} {gapY}".Trim();
         }
 
         private static string ConvertFxFlex(string value)
@@ -375,7 +367,7 @@ namespace tailiwnd_conversion
 
         private static string ConvertFxFlexOrder(string value)
         {
-                return $"order-{value}";
+            return $"order-{value}";
         }
 
 
