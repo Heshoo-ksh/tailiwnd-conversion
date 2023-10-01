@@ -12,7 +12,7 @@ namespace tailiwnd_conversion
         private static string inputFilePath = @"C:\Users\hisha\OneDrive\Desktop\tailwind project\vendor-details.component.html";
         private static string outputFilePath = @"C:\Users\hisha\OneDrive\Desktop\tailwind project\vendor-details-processed.component.html";
         private static bool shouldAddFlex = true; // The flag that controls whether "flex" should be added
-
+        private static int nextOrderValue = 1;
         private static Dictionary<string, Func<string, string>> 
             conversionDictionary = new Dictionary<string, Func<string, string>>(StringComparer.OrdinalIgnoreCase)
             {
@@ -59,9 +59,20 @@ namespace tailiwnd_conversion
 
                     var (coreProperty, tailwindPrefix) = ExtractPropertyAndPrefix(attribute.Name);
 
+
                     if (conversionDictionary.TryGetValue(coreProperty, out var converterFunc))
                     {
-                        var newClass = converterFunc(attribute.Value);
+                        var newClass = "";
+                        
+                        if (coreProperty == "fxflexorder")
+                        {
+                            newClass = converterFunc(attribute.Name + "|||" + attribute.Value);
+                        }
+                        else
+                        {
+                            newClass = converterFunc(attribute.Value);
+                        }
+
                         if (shouldAddFlex && !existingClasses.Contains("flex") && !existingClasses.Contains("grid"))
                         {
                             existingClasses.Add("flex");
@@ -365,12 +376,38 @@ namespace tailiwnd_conversion
             return $"{mainClass} {crossClass}".Trim();
         }
 
-        private static string ConvertFxFlexOrder(string value)
+        private static string ConvertFxFlexOrder(string combinedString)
         {
-            return $"order-{value}";
+            var parts = combinedString.Split(new string[] { "|||" }, StringSplitOptions.None);
+            var attributeName = parts[0];
+            var value = parts[1];
+
+            var prefixParts = attributeName.Split('.');
+            var prefixPart = prefixParts.Length > 1 ? prefixParts[1] : "";
+            var tailwindPrefix = ConvertScreenSize(prefixPart);
+
+            if (prefixPart.StartsWith("lt"))
+            {
+                var nextPrefix = GetNextScreenSize(prefixPart);
+                var order = $"order-{value} {nextPrefix}order-{nextOrderValue}";
+                nextOrderValue = Int32.Parse(value);
+                return order;
+            }
+
+            return $"{tailwindPrefix}order-{value}";
         }
 
 
-
+        private static string GetNextScreenSize(string prefixSize)
+        {
+            // Note: Add additional screen sizes if needed
+            var order = new List<string> { "xs", "sm", "md", "lg", "xl" };
+            for (int i = 0; i < order.Count - 1; i++)
+            {
+                if (prefixSize.EndsWith(order[i]))
+                    return ConvertScreenSize(order[i]);
+            }
+            return "";
+        }
     }
 }
