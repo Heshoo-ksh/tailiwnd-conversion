@@ -9,8 +9,10 @@ namespace tailiwnd_conversion
 {
     internal class Program
     {
-        private static string inputFilePath = @"C:\Users\hisha\OneDrive\Desktop\tailwind project\vendor-details.component.html";
-        private static string outputFilePath = @"C:\Users\hisha\OneDrive\Desktop\tailwind project\vendor-details-processed.component.html";
+        private static string inputFilePath = @"C:\Codes\Epitec Finance\Epitec.Finance.Web\src\app\shared\edit-factor-value-modal\edit-factor-value-modal.component.html";
+        //private static string outputFilePath = @"C:\Users\hisha\OneDrive\Desktop\tailwind project\vendor-details-processed.component.html";
+        private static string outputFilePath = inputFilePath;
+
         private static bool shouldAddFlex = true; // The flag that controls whether "flex" should be added
         private static int nextOrderValue = 1;
         private static Dictionary<string, Func<string, string>> 
@@ -22,7 +24,9 @@ namespace tailiwnd_conversion
                 {"fxFlex", ConvertFxFlex},
                 {"gdColumns", ConvertGdColumns},
                 {"fxFlexOrder", ConvertFxFlexOrder},
+               // {"fxFlexAlign", ConvertFxFlexAlign},
                 {"fxFlexFill", _ => { shouldAddFlex = false; return  "fill"; }},
+                {"fxFill", _ => { shouldAddFlex = false; return  "fill"; }},
 
             };
         
@@ -320,9 +324,36 @@ namespace tailiwnd_conversion
 
         private static string ConvertFxFlex(string value)
         {
-            // Default behavior for no prefix
-            return $"basis-[{value}%]";
+            if (string.IsNullOrWhiteSpace(value))
+                return "";
+
+            value = value.Trim(); 
+
+            if (value.Contains(" "))
+            {
+                var parts = value.Split(' ');
+
+                if (parts.Length == 3)
+                {
+                    // Only add the flex-grow class if the value is not 0
+                    string flexGrowClass = parts[0] != "0" ? "flex-grow" : "";
+
+                    // Only add the flex-shrink class if the value is not 0
+                    string flexShrinkClass = parts[1] != "0" ? "flex-shrink" : "";
+
+                    return $"{flexGrowClass} {flexShrinkClass} flex-basis-[{parts[2]}] max-w-[{parts[2]}]".Trim();
+                }
+                else
+                {
+                    return "";
+                }
+            }
+            else
+            {
+                return $"basis-[{value}%]";
+            }
         }
+
 
         private static string ConvertGdColumns(string value)
         {
@@ -341,6 +372,15 @@ namespace tailiwnd_conversion
                 .Replace("minmax", "_minmax")
                 .Replace("1fr", "_1fr")
                 .Replace(" ", "");
+
+            // Handling specific grid column values such as "400px 400px"
+            //if (actualValue.Contains(' '))
+           // {
+          //      var columns = actualValue.Split(' ');
+          //      int columnCount = columns.Length;
+          //      string columnSizes = string.Join(" ", columns);
+          //      classValue = $"{columnCount} grid-template-columns-[{columnSizes}]";
+         //   }
 
             return $"{tailwindPrefix}grid-cols-[{classValue}]";
         }
@@ -409,5 +449,23 @@ namespace tailiwnd_conversion
             }
             return "";
         }
+
+       /* private static string ConvertFxFlexAlign(string value)
+        {
+            shouldAddFlex = false;
+            value = value.Trim();
+
+            var mapping = new Dictionary<string, string>
+    {
+        {"start", "align-start"},
+        {"center", "align-center"},
+        {"end", "align-end"},
+        {"baseline", "align-baseline"},
+        {"stretch", "align-stretch"}
+    };
+
+            return mapping.ContainsKey(value) ? mapping[value] : "";
+        }
+*/
     }
 }
